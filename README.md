@@ -14,8 +14,8 @@ Telegram bot untuk mengecek dan mengelola email di Mandrill reject list (blockli
 ### 1. Clone & Install
 
 ```bash
-git clone git@github.com:IrfanArsyad/mandrill-clawdbot.git
-cd mandrill-clawdbot
+git clone git@github.com:IrfanArsyad/mandrill-mail-status.git
+cd mandrill-mail-status
 pnpm install
 ```
 
