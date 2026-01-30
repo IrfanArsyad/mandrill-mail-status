@@ -14,6 +14,15 @@ const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 export const bot = new Bot(config.telegramToken);
 
 function isAllowed(ctx: Context): boolean {
+  const chatId = ctx.chat?.id;
+  const chatType = ctx.chat?.type;
+
+  // Jika ALLOWED_GROUP_ID diset, hanya boleh dari group tersebut
+  if (config.allowedGroupId) {
+    return (chatType === "group" || chatType === "supergroup") && chatId === config.allowedGroupId;
+  }
+
+  // Fallback ke user allowlist (untuk private chat)
   if (config.allowedUserIds.length === 0) return true;
   return config.allowedUserIds.includes(ctx.from?.id ?? 0);
 }
@@ -23,10 +32,23 @@ function extractEmails(text: string): string[] {
   return words.filter((w) => EMAIL_REGEX.test(w));
 }
 
-// Middleware: check allowed users
+// Command tanpa restrict: untuk dapatkan group ID
+bot.command("groupid", async (ctx) => {
+  const chatType = ctx.chat?.type;
+  if (chatType === "group" || chatType === "supergroup") {
+    await ctx.reply(`Group ID: ${ctx.chat.id}\n\nCopy angka ini ke ALLOWED_GROUP_ID di .env`);
+  } else {
+    await ctx.reply("Command ini hanya bisa digunakan di dalam group.");
+  }
+});
+
+// Middleware: check allowed group/users
 bot.use(async (ctx, next) => {
   if (!isAllowed(ctx)) {
-    await ctx.reply("Akses ditolak. User ID kamu tidak ada di allowlist.");
+    // Hanya reply di private chat, jangan spam di group lain
+    if (ctx.chat?.type === "private") {
+      await ctx.reply("Akses ditolak. Bot ini hanya bisa digunakan di group yang diizinkan.");
+    }
     return;
   }
   await next();

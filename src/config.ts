@@ -12,6 +12,9 @@ function requireEnv(key: string): string {
 export const config = {
   telegramToken: requireEnv("TELEGRAM_BOT_TOKEN"),
   mandrillApiKey: requireEnv("MANDRILL_API_KEY"),
+  allowedGroupId: process.env.ALLOWED_GROUP_ID
+    ? Number(process.env.ALLOWED_GROUP_ID)
+    : null,
   allowedUserIds: process.env.ALLOWED_USER_IDS
     ? process.env.ALLOWED_USER_IDS.split(",").map(Number)
     : [],
