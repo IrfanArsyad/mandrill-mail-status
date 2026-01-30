@@ -17,12 +17,10 @@ function isAllowed(ctx: Context): boolean {
   const chatId = ctx.chat?.id;
   const chatType = ctx.chat?.type;
 
-  // Jika ALLOWED_GROUP_ID diset, hanya boleh dari group tersebut
   if (config.allowedGroupId) {
     return (chatType === "group" || chatType === "supergroup") && chatId === config.allowedGroupId;
   }
 
-  // Fallback ke user allowlist (untuk private chat)
   if (config.allowedUserIds.length === 0) return true;
   return config.allowedUserIds.includes(ctx.from?.id ?? 0);
 }
@@ -32,22 +30,22 @@ function extractEmails(text: string): string[] {
   return words.filter((w) => EMAIL_REGEX.test(w));
 }
 
-// Command tanpa restrict: untuk dapatkan group ID
+// Unrestricted command: get group ID
 bot.command("groupid", async (ctx) => {
   const chatType = ctx.chat?.type;
   if (chatType === "group" || chatType === "supergroup") {
-    await ctx.reply(`Group ID: ${ctx.chat.id}\n\nCopy angka ini ke ALLOWED_GROUP_ID di .env`);
+    await ctx.reply(`Group ID: ${ctx.chat.id}\n\nCopy this value to ALLOWED_GROUP_ID in .env`);
   } else {
-    await ctx.reply("Command ini hanya bisa digunakan di dalam group.");
+    await ctx.reply("This command can only be used inside a group.");
   }
 });
 
 // Middleware: check allowed group/users
 bot.use(async (ctx, next) => {
   if (!isAllowed(ctx)) {
-    // Hanya reply di private chat, jangan spam di group lain
+    console.log(`[BLOCKED] chatId=${ctx.chat?.id} type=${ctx.chat?.type} allowedGroup=${config.allowedGroupId}`);
     if (ctx.chat?.type === "private") {
-      await ctx.reply("Akses ditolak. Bot ini hanya bisa digunakan di group yang diizinkan.");
+      await ctx.reply("Access denied. This bot can only be used in the allowed group.");
     }
     return;
   }
@@ -59,12 +57,12 @@ bot.command("start", async (ctx) => {
     [
       "Mandrill Email Checker Bot",
       "",
-      "Perintah yang tersedia:",
-      "/cek <email> - Cek status email di reject list",
-      "/cekbulk <email1> <email2> ... - Cek beberapa email sekaligus",
-      "/hapus <email> - Hapus email dari reject list",
-      "/listblocked - Tampilkan semua email yang diblokir",
-      "/help - Tampilkan bantuan",
+      "Available commands:",
+      "/check <email> - Check email status in reject list",
+      "/checkbulk <email1> <email2> ... - Check multiple emails at once",
+      "/remove <email> - Remove email from reject list",
+      "/listblocked - Show all blocked emails",
+      "/help - Show help",
     ].join("\n")
   );
 });
@@ -72,33 +70,33 @@ bot.command("start", async (ctx) => {
 bot.command("help", async (ctx) => {
   await ctx.reply(
     [
-      "Cara penggunaan:",
+      "Usage:",
       "",
-      "/cek test@gmail.com",
-      "  Cek apakah email ada di reject list",
+      "/check test@gmail.com",
+      "  Check if an email is in the reject list",
       "",
-      "/cekbulk a@test.com b@test.com c@test.com",
-      "  Cek beberapa email sekaligus",
+      "/checkbulk a@test.com b@test.com c@test.com",
+      "  Check multiple emails at once",
       "",
-      "/hapus test@gmail.com",
-      "  Hapus email dari reject list",
+      "/remove test@gmail.com",
+      "  Remove an email from the reject list",
       "",
       "/listblocked",
-      "  Tampilkan semua email yang diblokir",
+      "  Show all blocked emails",
       "",
-      "Atau kirim email langsung tanpa command untuk cek status.",
+      "Or send an email address directly to check its status.",
     ].join("\n")
   );
 });
 
-bot.command("cek", async (ctx) => {
+bot.command("check", async (ctx) => {
   const email = ctx.match?.trim();
   if (!email || !EMAIL_REGEX.test(email)) {
-    await ctx.reply("Format: /cek email@domain.com");
+    await ctx.reply("Format: /check email@domain.com");
     return;
   }
 
-  await ctx.reply(`Mengecek status email: ${email}...`);
+  await ctx.reply(`Checking email status: ${email}...`);
 
   try {
     const [rejects, messages] = await Promise.all([
@@ -110,7 +108,7 @@ bot.command("cek", async (ctx) => {
       const reply = [
         `Status: CLEAN`,
         `Email: ${email}`,
-        `Email tidak ditemukan di reject list Mandrill.`,
+        `Email not found in Mandrill reject list.`,
       ];
 
       if (messages.length > 0) {
@@ -136,26 +134,26 @@ bot.command("cek", async (ctx) => {
         reply.push(formatMessageHistory(messages));
       }
 
-      reply.push("", `Gunakan /hapus ${email} untuk menghapus dari reject list.`);
+      reply.push("", `Use /remove ${email} to remove from reject list.`);
 
       await ctx.reply(reply.join("\n"));
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    await ctx.reply(`Error saat mengecek email: ${msg}`);
+    await ctx.reply(`Error checking email: ${msg}`);
   }
 });
 
-bot.command("cekbulk", async (ctx) => {
+bot.command("checkbulk", async (ctx) => {
   const text = ctx.match?.trim() ?? "";
   const emails = extractEmails(text);
 
   if (emails.length === 0) {
-    await ctx.reply("Format: /cekbulk email1@domain.com email2@domain.com ...");
+    await ctx.reply("Format: /checkbulk email1@domain.com email2@domain.com ...");
     return;
   }
 
-  await ctx.reply(`Mengecek ${emails.length} email...`);
+  await ctx.reply(`Checking ${emails.length} emails...`);
 
   const results: string[] = [];
   let blocked = 0;
@@ -192,34 +190,34 @@ bot.command("cekbulk", async (ctx) => {
   );
 });
 
-bot.command("hapus", async (ctx) => {
+bot.command("remove", async (ctx) => {
   const email = ctx.match?.trim();
   if (!email || !EMAIL_REGEX.test(email)) {
-    await ctx.reply("Format: /hapus email@domain.com");
+    await ctx.reply("Format: /remove email@domain.com");
     return;
   }
 
   try {
     const result = await deleteFromRejectList(email);
     if (result.deleted) {
-      await ctx.reply(`Email ${email} berhasil dihapus dari reject list.`);
+      await ctx.reply(`Email ${email} has been removed from the reject list.`);
     } else {
-      await ctx.reply(`Email ${email} tidak ditemukan di reject list.`);
+      await ctx.reply(`Email ${email} was not found in the reject list.`);
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    await ctx.reply(`Error saat menghapus email: ${msg}`);
+    await ctx.reply(`Error removing email: ${msg}`);
   }
 });
 
 bot.command("listblocked", async (ctx) => {
-  await ctx.reply("Mengambil data reject list...");
+  await ctx.reply("Fetching reject list...");
 
   try {
     const results = await listAllRejects();
 
     if (results.length === 0) {
-      await ctx.reply("Reject list kosong. Tidak ada email yang diblokir.");
+      await ctx.reply("Reject list is empty. No blocked emails.");
       return;
     }
 
@@ -227,7 +225,6 @@ bot.command("listblocked", async (ctx) => {
       (entry, i) => `${i + 1}. ${entry.email} (${entry.reason}) - ${entry.created_at}`
     );
 
-    // Telegram message limit is 4096 chars, split if needed
     const header = `Total blocked: ${results.length}\n\n`;
     const chunks: string[] = [];
     let current = header;
@@ -257,14 +254,14 @@ bot.on("message:text", async (ctx) => {
 
   if (emails.length === 0) {
     await ctx.reply(
-      "Kirim email yang ingin dicek, atau gunakan /help untuk melihat perintah."
+      "Send an email address to check, or use /help to see available commands."
     );
     return;
   }
 
   if (emails.length === 1) {
     const email = emails[0];
-    await ctx.reply(`Mengecek status email: ${email}...`);
+    await ctx.reply(`Checking email status: ${email}...`);
 
     try {
       const [rejects, messages] = await Promise.all([
@@ -273,7 +270,7 @@ bot.on("message:text", async (ctx) => {
       ]);
 
       if (rejects.length === 0) {
-        const reply = [`Status: CLEAN`, `Email: ${email}`, `Tidak ada di reject list.`];
+        const reply = [`Status: CLEAN`, `Email: ${email}`, `Not found in reject list.`];
         if (messages.length > 0) reply.push(formatMessageHistory(messages));
         await ctx.reply(reply.join("\n"));
       } else {
@@ -286,7 +283,7 @@ bot.on("message:text", async (ctx) => {
           ...details,
         ];
         if (messages.length > 0) reply.push(formatMessageHistory(messages));
-        reply.push("", `Gunakan /hapus ${email} untuk menghapus.`);
+        reply.push("", `Use /remove ${email} to remove from reject list.`);
         await ctx.reply(reply.join("\n"));
       }
     } catch (error) {
@@ -294,8 +291,7 @@ bot.on("message:text", async (ctx) => {
       await ctx.reply(`Error: ${msg}`);
     }
   } else {
-    // Multiple emails detected, run bulk check
-    await ctx.reply(`Terdeteksi ${emails.length} email, mengecek...`);
+    await ctx.reply(`Detected ${emails.length} emails, checking...`);
 
     const results: string[] = [];
     let blocked = 0;

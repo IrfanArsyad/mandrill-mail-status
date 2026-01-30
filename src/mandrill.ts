@@ -46,7 +46,7 @@ interface MessageEntry {
   opens_detail: { ts: number; ip: string; location: string; ua: string }[];
   clicks: number;
   clicks_detail: { ts: number; ip: string; location: string; ua: string; url: string }[];
-  state: string; // "sent" | "bounced" | "rejected" | "spam" | "unsub" | "deferred"
+  state: string;
   metadata: Record<string, string>;
 }
 
@@ -90,19 +90,17 @@ export async function listAllRejects(): Promise<RejectEntry[]> {
 }
 
 const REASON_LABELS: Record<string, string> = {
-  "hard-bounce": "Hard Bounce - Email tidak bisa dikirim (alamat tidak ada/tidak valid)",
-  "soft-bounce": "Soft Bounce - Gagal sementara (mailbox penuh/server down)",
-  "spam": "Spam Complaint - Penerima melaporkan email sebagai spam",
-  "unsub": "Unsubscribe - Penerima berhenti berlangganan",
-  "custom": "Manual - Ditambahkan secara manual ke reject list",
+  "hard-bounce": "Hard Bounce - Email address does not exist or is invalid",
+  "soft-bounce": "Soft Bounce - Temporary failure (mailbox full/server down)",
+  "spam": "Spam Complaint - Recipient reported the email as spam",
+  "unsub": "Unsubscribe - Recipient unsubscribed",
+  "custom": "Manual - Manually added to reject list",
 };
 
 function parseSmtpDetail(detail: string): string {
-  // Extract SMTP error code
   const codeMatch = detail.match(/(\d{3})[-\s](\d\.\d\.\d)/);
   const smtpCode = codeMatch ? `${codeMatch[1]} (${codeMatch[2]})` : null;
 
-  // Clean up multi-line SMTP response
   const cleaned = detail
     .replace(/\s{2,}/g, " ")
     .replace(/\d{3}[-\s]\d\.\d\.\d\s*/g, "")
@@ -110,7 +108,7 @@ function parseSmtpDetail(detail: string): string {
 
   const lines: string[] = [];
   if (smtpCode) lines.push(`  SMTP Code: ${smtpCode}`);
-  if (cleaned) lines.push(`  Pesan: ${cleaned}`);
+  if (cleaned) lines.push(`  Message: ${cleaned}`);
   return lines.join("\n");
 }
 
@@ -120,7 +118,7 @@ export function formatRejectEntry(entry: RejectEntry): string {
   const lines = [
     ``,
     `--- Reject Info ---`,
-    `Alasan  : ${reasonLabel}`,
+    `Reason  : ${reasonLabel}`,
   ];
 
   if (entry.detail) {
@@ -130,25 +128,25 @@ export function formatRejectEntry(entry: RejectEntry): string {
 
   lines.push(
     ``,
-    `--- Waktu ---`,
-    `Ditambahkan  : ${entry.created_at}`,
-    `Event Terakhir: ${entry.last_event_at}`,
+    `--- Timestamp ---`,
+    `Added     : ${entry.created_at}`,
+    `Last Event: ${entry.last_event_at}`,
   );
 
   if (entry.expires_at) {
-    lines.push(`Auto-hapus   : ${entry.expires_at}`);
+    lines.push(`Auto-remove: ${entry.expires_at}`);
   }
-  lines.push(`Status Expire: ${entry.expired ? "Sudah expired" : "Masih aktif (belum expired)"}`);
+  lines.push(`Expired    : ${entry.expired ? "Yes" : "No (still active)"}`);
 
   if (entry.sender) {
     lines.push(
       ``,
       `--- Sender Stats ---`,
-      `Sender   : ${entry.sender.address}`,
-      `Terkirim : ${entry.sender.sent}`,
-      `Bounce   : ${entry.sender.hard_bounces} hard, ${entry.sender.soft_bounces} soft`,
-      `Rejects  : ${entry.sender.rejects}`,
-      `Complaint: ${entry.sender.complaints}`,
+      `Sender    : ${entry.sender.address}`,
+      `Sent      : ${entry.sender.sent}`,
+      `Bounces   : ${entry.sender.hard_bounces} hard, ${entry.sender.soft_bounces} soft`,
+      `Rejects   : ${entry.sender.rejects}`,
+      `Complaints: ${entry.sender.complaints}`,
     );
   }
 
@@ -156,23 +154,23 @@ export function formatRejectEntry(entry: RejectEntry): string {
 }
 
 const STATE_LABELS: Record<string, string> = {
-  sent: "Terkirim",
-  bounced: "Bounce",
-  rejected: "Ditolak",
+  sent: "Sent",
+  bounced: "Bounced",
+  rejected: "Rejected",
   spam: "SPAM",
-  unsub: "Unsub",
-  deferred: "Tertunda",
-  queued: "Antrian",
+  unsub: "Unsubscribed",
+  deferred: "Deferred",
+  queued: "Queued",
 };
 
 export function formatMessageHistory(messages: MessageEntry[]): string {
   if (messages.length === 0) {
-    return "\n--- Riwayat Pengiriman ---\nTidak ada riwayat pengiriman ditemukan.";
+    return "\n--- Send History ---\nNo send history found.";
   }
 
   const lines = [
     ``,
-    `--- Riwayat Pengiriman (${messages.length} terakhir) ---`,
+    `--- Send History (last ${messages.length}) ---`,
   ];
 
   for (let i = 0; i < messages.length; i++) {
@@ -180,20 +178,20 @@ export function formatMessageHistory(messages: MessageEntry[]): string {
     const date = new Date(msg.ts * 1000).toISOString().replace("T", " ").substring(0, 19);
     const state = STATE_LABELS[msg.state] ?? msg.state;
     const spam = msg.state === "spam" ? " << SPAM REPORT" : "";
-    const subject = msg.subject || "(tanpa subject)";
+    const subject = msg.subject || "(no subject)";
 
     lines.push(
       `${i + 1}. ${date}`,
-      `   Subject : ${subject}`,
-      `   Status  : ${state}${spam}`,
-      `   Opens   : ${msg.opens} | Clicks: ${msg.clicks}`,
-      `   Sender  : ${msg.sender}`,
+      `   Subject: ${subject}`,
+      `   Status : ${state}${spam}`,
+      `   Opens  : ${msg.opens} | Clicks: ${msg.clicks}`,
+      `   Sender : ${msg.sender}`,
     );
   }
 
   const spamCount = messages.filter((m) => m.state === "spam").length;
   if (spamCount > 0) {
-    lines.push(``, `!! ${spamCount} dari ${messages.length} email di-report SPAM`);
+    lines.push(``, `!! ${spamCount} of ${messages.length} emails reported as SPAM`);
   }
 
   return lines.join("\n");

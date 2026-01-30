@@ -1,14 +1,16 @@
 # Mandrill Telegram Bot
 
-Telegram bot untuk mengecek dan mengelola email di Mandrill reject list (blocklist, bounce, spam) beserta riwayat pengiriman.
+Tired of wasting time checking emails on Mandrill? Use this bot to handle your Mandrill needs right from Telegram. Supports group-only or user ID restriction for secure access.
+
+Check reject list status, view send history, remove blocked emails — all from a single Telegram chat.
 
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) v20+
 - [pnpm](https://pnpm.io/)
-- [PM2](https://pm2.keymetrics.io/) (opsional, untuk production)
-- Telegram Bot Token (dari [@BotFather](https://t.me/BotFather))
-- Mandrill API Key (dari [Mailchimp Transactional](https://mandrillapp.com/settings))
+- [PM2](https://pm2.keymetrics.io/) (optional, for production)
+- Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
+- Mandrill API Key (from [Mailchimp Transactional](https://mandrillapp.com/settings))
 
 ## Setup
 
@@ -20,35 +22,40 @@ cd mandrill-mail-status
 pnpm install
 ```
 
-### 2. Konfigurasi Environment
+### 2. Environment Configuration
 
 ```bash
 cp .env.example .env
 ```
 
-Edit file `.env`:
+Edit `.env`:
 
 ```env
-# Token dari @BotFather di Telegram
+# Telegram bot token from @BotFather
 TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
 
-# API Key dari Mandrill (Mailchimp Transactional > Settings > SMTP & API Info)
+# Mandrill API Key (Mailchimp Transactional > Settings > SMTP & API Info)
 MANDRILL_API_KEY=your-mandrill-api-key
 
-# (Opsional) Telegram user ID yang boleh akses bot, pisahkan dengan koma
-# Kosongkan jika semua orang boleh akses
+# (Optional) Restrict bot to a specific Telegram group
+# Use /groupid command inside the group to get the ID
+ALLOWED_GROUP_ID=-1001234567890
+
+# (Optional) Comma-separated Telegram user IDs for private chat access
+# Only used if ALLOWED_GROUP_ID is not set
 ALLOWED_USER_IDS=123456789
 ```
 
-#### Cara Mendapatkan Credentials
+#### How to Get Credentials
 
-| Credential | Cara |
+| Credential | How |
 |---|---|
-| **Telegram Bot Token** | Chat [@BotFather](https://t.me/BotFather) > `/newbot` > ikuti instruksi > copy token |
+| **Telegram Bot Token** | Chat [@BotFather](https://t.me/BotFather) > `/newbot` > follow instructions > copy token |
 | **Mandrill API Key** | Login [Mailchimp](https://login.mailchimp.com/) > Transactional > Settings > SMTP & API Info > + New API Key |
 | **Telegram User ID** | Chat [@userinfobot](https://t.me/userinfobot) > `/start` > copy ID |
+| **Group ID** | Add bot to group > type `/groupid` > copy the ID |
 
-### 3. Jalankan Bot
+### 3. Run the Bot
 
 ```bash
 # Development (auto-reload)
@@ -58,7 +65,7 @@ pnpm dev
 pnpm start
 ```
 
-### 4. Jalankan dengan PM2 (Production)
+### 4. Run with PM2 (Production)
 
 ```bash
 # Start
@@ -70,14 +77,14 @@ pnpm start
 # Restart
 ./start.sh restart
 
-# Lihat log
+# View logs
 ./start.sh logs
 
-# Cek status
+# Check status
 ./start.sh status
 ```
 
-Auto-start saat reboot:
+Auto-start on reboot:
 
 ```bash
 pm2 save && pm2 startup
@@ -85,62 +92,65 @@ pm2 save && pm2 startup
 
 ## Commands
 
-| Command | Fungsi |
+| Command | Description |
 |---|---|
-| `/cek email@domain.com` | Cek status email di reject list + riwayat pengiriman |
-| `/cekbulk a@x.com b@x.com` | Cek beberapa email sekaligus |
-| `/hapus email@domain.com` | Hapus email dari reject list |
-| `/listblocked` | Tampilkan semua email yang diblokir |
-| `/help` | Tampilkan bantuan |
+| `/check email@domain.com` | Check email status in reject list + send history |
+| `/checkbulk a@x.com b@x.com` | Check multiple emails at once |
+| `/remove email@domain.com` | Remove email from reject list |
+| `/listblocked` | Show all blocked emails |
+| `/groupid` | Show current group ID (for setup) |
+| `/help` | Show help |
 
-Bisa juga kirim email langsung tanpa command, bot akan auto-detect dan cek statusnya.
+You can also send an email address directly without a command, and the bot will auto-detect and check its status.
 
-## Contoh Penggunaan
+## Example Usage
 
 ```
-Anda: /cek bounced@domain.com
+You: /check bounced@domain.com
 
-Bot:  Status: BLOCKED
-      Email: bounced@domain.com
+Bot: Checking email status: bounced@domain.com...
 
-      Detail:
+     Status: BLOCKED
+     Email: bounced@domain.com
 
-      --- Reject Info ---
-      Alasan  : Hard Bounce - Email tidak bisa dikirim (alamat tidak ada/tidak valid)
+     Detail:
 
-      --- SMTP Detail ---
-        SMTP Code: 550 (5.1.1)
-        Pesan: The email account that you tried to reach does not exist.
+     --- Reject Info ---
+     Reason  : Hard Bounce - Email address does not exist or is invalid
 
-      --- Waktu ---
-      Ditambahkan  : 2026-01-30 18:36:36
-      Event Terakhir: 2026-01-30 18:36:36
-      Auto-hapus   : 2026-02-06 18:36:36
-      Status Expire: Masih aktif (belum expired)
+     --- SMTP Detail ---
+       SMTP Code: 550 (5.1.1)
+       Message: The email account that you tried to reach does not exist.
 
-      --- Riwayat Pengiriman (2 terakhir) ---
-      1. 2026-01-28 10:30:00
-         Subject : Invoice #123
-         Status  : SPAM << SPAM REPORT
-         Opens   : 0 | Clicks: 0
-         Sender  : noreply@domain.com
-      2. 2026-01-25 14:15:00
-         Subject : Promo Januari
-         Status  : Terkirim
-         Opens   : 1 | Clicks: 0
-         Sender  : noreply@domain.com
+     --- Timestamp ---
+     Added     : 2026-01-30 18:36:36
+     Last Event: 2026-01-30 18:36:36
+     Auto-remove: 2026-02-06 18:36:36
+     Expired    : No (still active)
 
-      !! 1 dari 2 email di-report SPAM
+     --- Send History (last 2) ---
+     1. 2026-01-28 10:30:00
+        Subject: Invoice #123
+        Status : SPAM << SPAM REPORT
+        Opens  : 0 | Clicks: 0
+        Sender : noreply@domain.com
+     2. 2026-01-25 14:15:00
+        Subject: Promo January
+        Status : Sent
+        Opens  : 1 | Clicks: 0
+        Sender : noreply@domain.com
 
-      Gunakan /hapus bounced@domain.com untuk menghapus dari reject list.
+     !! 1 of 2 emails reported as SPAM
+
+     Use /remove bounced@domain.com to remove from reject list.
 ```
 
 ## Mandrill API Endpoints
 
-Bot ini menggunakan endpoint berikut:
+This bot uses the following endpoints:
 
-| Endpoint | Fungsi |
+| Endpoint | Description |
 |---|---|
-| `rejects/list` | Cek email di reject list |
-| `rejects/delete` | Hapus email dari reject list |
-| `messages/search` | Cari riwayat pengiriman ke email |
+| `rejects/list` | Check email in reject list |
+| `rejects/delete` | Remove email from reject list |
+| `messages/search` | Search send history for an email |
