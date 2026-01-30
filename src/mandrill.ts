@@ -34,6 +34,22 @@ interface DeleteResult {
   subaccount: string | null;
 }
 
+interface MessageEntry {
+  ts: number;
+  _id: string;
+  sender: string;
+  template: string | null;
+  subject: string;
+  email: string;
+  tags: string[];
+  opens: number;
+  opens_detail: { ts: number; ip: string; location: string; ua: string }[];
+  clicks: number;
+  clicks_detail: { ts: number; ip: string; location: string; ua: string; url: string }[];
+  state: string; // "sent" | "bounced" | "rejected" | "spam" | "unsub" | "deferred"
+  metadata: Record<string, string>;
+}
+
 interface MandrillError {
   status: "error";
   code: number;
@@ -58,6 +74,13 @@ export async function checkEmail(email: string): Promise<RejectEntry[]> {
 
 export async function deleteFromRejectList(email: string): Promise<DeleteResult> {
   return apiCall<DeleteResult>("/rejects/delete.json", { email });
+}
+
+export async function searchMessages(email: string, limit = 5): Promise<MessageEntry[]> {
+  return apiCall<MessageEntry[]>("/messages/search.json", {
+    query: `full_email:${email}`,
+    limit,
+  });
 }
 
 export async function listAllRejects(): Promise<RejectEntry[]> {
@@ -132,8 +155,52 @@ export function formatRejectEntry(entry: RejectEntry): string {
   return lines.join("\n");
 }
 
+const STATE_LABELS: Record<string, string> = {
+  sent: "Terkirim",
+  bounced: "Bounce",
+  rejected: "Ditolak",
+  spam: "SPAM",
+  unsub: "Unsub",
+  deferred: "Tertunda",
+  queued: "Antrian",
+};
+
+export function formatMessageHistory(messages: MessageEntry[]): string {
+  if (messages.length === 0) {
+    return "\n--- Riwayat Pengiriman ---\nTidak ada riwayat pengiriman ditemukan.";
+  }
+
+  const lines = [
+    ``,
+    `--- Riwayat Pengiriman (${messages.length} terakhir) ---`,
+  ];
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    const date = new Date(msg.ts * 1000).toISOString().replace("T", " ").substring(0, 19);
+    const state = STATE_LABELS[msg.state] ?? msg.state;
+    const spam = msg.state === "spam" ? " << SPAM REPORT" : "";
+    const subject = msg.subject || "(tanpa subject)";
+
+    lines.push(
+      `${i + 1}. ${date}`,
+      `   Subject : ${subject}`,
+      `   Status  : ${state}${spam}`,
+      `   Opens   : ${msg.opens} | Clicks: ${msg.clicks}`,
+      `   Sender  : ${msg.sender}`,
+    );
+  }
+
+  const spamCount = messages.filter((m) => m.state === "spam").length;
+  if (spamCount > 0) {
+    lines.push(``, `!! ${spamCount} dari ${messages.length} email di-report SPAM`);
+  }
+
+  return lines.join("\n");
+}
+
 export function isMandrillError(data: unknown): data is MandrillError {
   return typeof data === "object" && data !== null && "status" in data && (data as MandrillError).status === "error";
 }
 
-export type { RejectEntry, DeleteResult };
+export type { RejectEntry, DeleteResult, MessageEntry };

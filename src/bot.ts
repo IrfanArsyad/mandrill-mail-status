@@ -4,7 +4,9 @@ import {
   checkEmail,
   deleteFromRejectList,
   listAllRejects,
+  searchMessages,
   formatRejectEntry,
+  formatMessageHistory,
 } from "./mandrill.js";
 
 const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
@@ -77,33 +79,44 @@ bot.command("cek", async (ctx) => {
   await ctx.reply(`Mengecek status email: ${email}...`);
 
   try {
-    const results = await checkEmail(email);
+    const [rejects, messages] = await Promise.all([
+      checkEmail(email),
+      searchMessages(email).catch(() => []),
+    ]);
 
-    if (results.length === 0) {
-      await ctx.reply(
-        [
-          `Status: CLEAN`,
-          `Email: ${email}`,
-          `Email tidak ditemukan di reject list Mandrill.`,
-        ].join("\n")
-      );
+    if (rejects.length === 0) {
+      const reply = [
+        `Status: CLEAN`,
+        `Email: ${email}`,
+        `Email tidak ditemukan di reject list Mandrill.`,
+      ];
+
+      if (messages.length > 0) {
+        reply.push(formatMessageHistory(messages));
+      }
+
+      await ctx.reply(reply.join("\n"));
     } else {
-      const details = results.map((entry, i) => {
-        const header = results.length > 1 ? `\n[${i + 1}]` : "";
+      const details = rejects.map((entry, i) => {
+        const header = rejects.length > 1 ? `\n[${i + 1}]` : "";
         return `${header}\n${formatRejectEntry(entry)}`;
       });
 
-      await ctx.reply(
-        [
-          `Status: BLOCKED`,
-          `Email: ${email}`,
-          "",
-          "Detail:",
-          ...details,
-          "",
-          `Gunakan /hapus ${email} untuk menghapus dari reject list.`,
-        ].join("\n")
-      );
+      const reply = [
+        `Status: BLOCKED`,
+        `Email: ${email}`,
+        "",
+        "Detail:",
+        ...details,
+      ];
+
+      if (messages.length > 0) {
+        reply.push(formatMessageHistory(messages));
+      }
+
+      reply.push("", `Gunakan /hapus ${email} untuk menghapus dari reject list.`);
+
+      await ctx.reply(reply.join("\n"));
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
@@ -232,24 +245,27 @@ bot.on("message:text", async (ctx) => {
     await ctx.reply(`Mengecek status email: ${email}...`);
 
     try {
-      const results = await checkEmail(email);
-      if (results.length === 0) {
-        await ctx.reply(
-          [`Status: CLEAN`, `Email: ${email}`, `Tidak ada di reject list.`].join("\n")
-        );
+      const [rejects, messages] = await Promise.all([
+        checkEmail(email),
+        searchMessages(email).catch(() => []),
+      ]);
+
+      if (rejects.length === 0) {
+        const reply = [`Status: CLEAN`, `Email: ${email}`, `Tidak ada di reject list.`];
+        if (messages.length > 0) reply.push(formatMessageHistory(messages));
+        await ctx.reply(reply.join("\n"));
       } else {
-        const details = results.map((e) => formatRejectEntry(e));
-        await ctx.reply(
-          [
-            `Status: BLOCKED`,
-            `Email: ${email}`,
-            "",
-            "Detail:",
-            ...details,
-            "",
-            `Gunakan /hapus ${email} untuk menghapus.`,
-          ].join("\n")
-        );
+        const details = rejects.map((e) => formatRejectEntry(e));
+        const reply = [
+          `Status: BLOCKED`,
+          `Email: ${email}`,
+          "",
+          "Detail:",
+          ...details,
+        ];
+        if (messages.length > 0) reply.push(formatMessageHistory(messages));
+        reply.push("", `Gunakan /hapus ${email} untuk menghapus.`);
+        await ctx.reply(reply.join("\n"));
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Unknown error";
